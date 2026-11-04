@@ -3,7 +3,7 @@ const app = express();
 const KEY = process.env.TWELVEDATA_KEY;
 const NTFY = (process.env.NTFY_SERVER || 'https://ntfy.sh').replace(/\/$/, '');
 const TOPIC = process.env.NTFY_TOPIC;
-const TTL = { '1min': 55e3, '5min': 120e3, '15min': 180e3, '1h': 600e3, '4h': 900e3 };
+const TTL = { '1min': 55e3, '5min': 120e3, '15min': 180e3, '30min': 600e3, '1h': 600e3, '4h': 900e3 };
 const cache = {};
 
 async function getCandles(iv) {
@@ -41,40 +41,49 @@ function analyse(d) {
 }
 
 /* ---------- ntfy alerts ---------- */
-let last = { sig: 'WAIT', at: 0 };
+const GROUPS = {
+  scalp: { tfs: ['1min', '5min', '15min'], entryTf: '1min', atrTf: '5min', cooldown: 15 * 60e3, every: (+process.env.SCALP_MIN || 10) * 60e3 },
+  swing: { tfs: ['30min', '1h', '4h'], entryTf: '30min', atrTf: '1h', cooldown: 3600e3, every: (+process.env.SWING_MIN || 30) * 60e3 }
+};
+const last = { scalp: { sig: 'WAIT', at: 0 }, swing: { sig: 'WAIT', at: 0 } };
 async function ntfy(title, body, priority = 'high', tags = 'chart_with_upwards_trend') {
   if (!TOPIC) throw new Error('NTFY_TOPIC is not set on the server');
   const r = await fetch(`${NTFY}/${encodeURIComponent(TOPIC)}`, { method: 'POST', body, headers: { Title: title, Priority: priority, Tags: tags } });
   if (!r.ok) throw new Error('ntfy returned ' + r.status);
 }
-async function levels() {
-  const [m15, h1, h4] = await Promise.all(['15min', '1h', '4h'].map(getCandles));
-  const calls = [m15, h1, h4].map(analyse);
-  const entry = m15[m15.length - 1].close, a = atr(m15);
-  return { calls, entry, a };
+async function levels(g) {
+  const G = GROUPS[g], all = {};
+  await Promise.all([...new Set([...G.tfs, G.entryTf, G.atrTf])].map(async t => { all[t] = await getCandles(t); }));
+  const calls = G.tfs.map(t => analyse(all[t]));
+  const e = all[G.entryTf];
+  return { calls, entry: e[e.length - 1].close, a: atr(all[G.atrTf]) };
 }
-function message(sig, entry, a) {
+function message(g, sig, entry, a) {
   const dir = sig === 'BUY' ? 1 : -1, f = x => x.toFixed(2);
   const sl = entry - dir * 1.5 * a, tp1 = entry + dir * 1.5 * a, tp2 = entry + dir * 3 * a;
-  return `Entry: ${f(entry)}\nStop loss: ${f(sl)}\nTake profit 1: ${f(tp1)} (1:1)\nTake profit 2: ${f(tp2)} (1:2)\nAll of 15m, 1h and 4h agree.`;
+  return `Entry: ${f(entry)}\nStop loss: ${f(sl)}\nTake profit 1: ${f(tp1)} (1:1)\nTake profit 2: ${f(tp2)} (1:2)\nAll of ${GROUPS[g].tfs.join(', ')} agree.`;
 }
-async function check() {
+async function check(g) {
   try {
-    const { calls, entry, a } = await levels();
+    const { calls, entry, a } = await levels(g);
     const sig = calls.every(x => x === 'BUY') ? 'BUY' : calls.every(x => x === 'SELL') ? 'SELL' : 'WAIT';
-    if (sig === 'WAIT') { last.sig = 'WAIT'; return; }
-    if (sig === last.sig) return;                       // already alerted this move
-    if (Date.now() - last.at < 3600e3) return;          // 1h cooldown
-    await ntfy(`${sig} XAUUSD`, message(sig, entry, a), 'high', sig === 'BUY' ? 'green_circle' : 'red_circle');
-    last = { sig, at: Date.now() };
-  } catch (e) { console.error('check failed:', e.message); }
+    const L = last[g];
+    if (sig === 'WAIT') { L.sig = 'WAIT'; return; }
+    if (sig === L.sig) return;                           // already alerted this move
+    if (Date.now() - L.at < GROUPS[g].cooldown) return;
+    await ntfy(`${sig} XAUUSD (${g})`, message(g, sig, entry, a), 'high', sig === 'BUY' ? 'green_circle' : 'red_circle');
+    last[g] = { sig, at: Date.now() };
+  } catch (e) { console.error(g + ' check failed:', e.message); }
 }
-if (TOPIC && KEY) { setInterval(check, 10 * 60e3); setTimeout(check, 15e3); }
+if (TOPIC && KEY) {
+  setInterval(() => check('scalp'), GROUPS.scalp.every); setTimeout(() => check('scalp'), 15e3);
+  setInterval(() => check('swing'), GROUPS.swing.every); setTimeout(() => check('swing'), 45e3);
+}
 
 app.get('/api/test', async (req, res) => {
   try {
-    const { entry, a } = await levels();
-    await ntfy('TEST XAUUSD', 'Test alert (example levels)\n' + message('BUY', entry, a), 'default', 'test_tube');
+    const { entry, a } = await levels('swing');
+    await ntfy('TEST XAUUSD', 'Test alert (example levels)\n' + message('swing', 'BUY', entry, a), 'default', 'test_tube');
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
