@@ -19,7 +19,7 @@ h1 span{color:var(--gold)}
 .chip{flex:1;border:1px solid var(--line);border-radius:10px;padding:8px;text-align:center;font-size:13px}
 .chip b{display:block;font-size:15px}
 .tabs{display:flex;gap:6px;margin:12px 0 8px}
-.tabs button{flex:1;background:var(--panel);color:var(--mute);border:1px solid var(--line);border-radius:10px;padding:9px;font:inherit;font-weight:600}
+.tabs button{flex:1;padding:9px 0!important;min-width:0;background:var(--panel);color:var(--mute);border:1px solid var(--line);border-radius:10px;padding:9px;font:inherit;font-weight:600}
 .tabs button.on{color:var(--text);border-color:var(--gold)}
 #chart{height:420px;border-radius:12px;overflow:hidden;border:1px solid var(--line)}
 .why{margin-top:12px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px 16px}
@@ -41,8 +41,8 @@ h1 span{color:var(--gold)}
 <div class="why" id="why"></div>
 <p class="note">Signals come from four rule-based strategies and describe current conditions. They can't predict the market and some will be wrong. Never risk money you can't afford to lose.</p>
 <script>
-const TF={'1m':'1min','5m':'5min','15m':'15min','1h':'1h','4h':'4h'};
-const grp=k=>(k==='1m'||k==='5m')?['1m','5m','15m']:['15m','1h','4h'];let tf='15m';
+const TF={'1m':'1min','5m':'5min','15m':'15min','30m':'30min','1h':'1h','4h':'4h'};
+const grp=k=>['1m','5m','15m'].includes(k)?['1m','5m','15m']:['30m','1h','4h'];let tf='15m';
 const $=s=>document.querySelector(s);
 const chart=LightweightCharts.createChart($('#chart'),{autoSize:true,layout:{background:{color:'#000'},textColor:'#8a94a3'},grid:{vertLines:{color:'#12161d'},horzLines:{color:'#12161d'}},timeScale:{timeVisible:true,borderColor:'#222'},rightPriceScale:{borderColor:'#222'}});
 const candles=chart.addCandlestickSeries({upColor:'#26a69a',downColor:'#ef5350',borderVisible:false,wickUpColor:'#26a69a',wickDownColor:'#ef5350'});
