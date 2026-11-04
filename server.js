@@ -42,10 +42,10 @@ function analyse(d) {
 
 /* ---------- ntfy alerts ---------- */
 const GROUPS = {
-  scalp: { tfs: ['1min', '5min', '15min'], entryTf: '1min', atrTf: '5min', cooldown: 15 * 60e3, every: (+process.env.SCALP_MIN || 10) * 60e3 },
-  swing: { tfs: ['30min', '1h', '4h'], entryTf: '30min', atrTf: '1h', cooldown: 3600e3, every: (+process.env.SWING_MIN || 30) * 60e3 }
+  scalp: { tfs: ['1min', '5min'], entryTf: '1min', atrTf: '5min', cooldown: 15 * 60e3, every: (+process.env.SCALP_MIN || 10) * 60e3 },
+  mid: { tfs: ['15min', '30min'], entryTf: '15min', atrTf: '30min', cooldown: 30 * 60e3, every: (+process.env.MID_MIN || 15) * 60e3 }
 };
-const last = { scalp: { sig: 'WAIT', at: 0 }, swing: { sig: 'WAIT', at: 0 } };
+const last = { scalp: { sig: 'WAIT', at: 0 }, mid: { sig: 'WAIT', at: 0 } };
 async function ntfy(title, body, priority = 'high', tags = 'chart_with_upwards_trend') {
   if (!TOPIC) throw new Error('NTFY_TOPIC is not set on the server');
   const r = await fetch(`${NTFY}/${encodeURIComponent(TOPIC)}`, { method: 'POST', body, headers: { Title: title, Priority: priority, Tags: tags } });
@@ -77,13 +77,13 @@ async function check(g) {
 }
 if (TOPIC && KEY) {
   setInterval(() => check('scalp'), GROUPS.scalp.every); setTimeout(() => check('scalp'), 15e3);
-  setInterval(() => check('swing'), GROUPS.swing.every); setTimeout(() => check('swing'), 45e3);
+  setInterval(() => check('mid'), GROUPS.mid.every); setTimeout(() => check('mid'), 45e3);
 }
 
 app.get('/api/test', async (req, res) => {
   try {
-    const { entry, a } = await levels('swing');
-    await ntfy('TEST XAUUSD', 'Test alert (example levels)\n' + message('swing', 'BUY', entry, a), 'default', 'test_tube');
+    const { entry, a } = await levels('mid');
+    await ntfy('TEST XAUUSD', 'Test alert (example levels)\n' + message('mid', 'BUY', entry, a), 'default', 'test_tube');
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
